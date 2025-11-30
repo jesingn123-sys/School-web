@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Student } from "../types";
 
@@ -7,7 +8,7 @@ export const generateRandomStudents = async (count: number = 3): Promise<Partial
   try {
     const response = await genAI.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Generate ${count} Gen Z style high school student profiles (approx age 15-18) with diverse names, grades (e.g., 10-A, 11-Science, 12-Commerce), and class roll numbers.`,
+      contents: `Generate ${count} Gen Z style high school student profiles (approx age 15-18) with diverse names, gender (Male/Female), grades (e.g., 10-A, 11-Science), class roll numbers, and a unique 4-digit GR Number (General Register No).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -17,9 +18,11 @@ export const generateRandomStudents = async (count: number = 3): Promise<Partial
             properties: {
               name: { type: Type.STRING },
               rollNumber: { type: Type.STRING },
+              grNumber: { type: Type.STRING },
               grade: { type: Type.STRING },
+              gender: { type: Type.STRING, enum: ["Male", "Female", "Other"] }
             },
-            required: ["name", "rollNumber", "grade"]
+            required: ["name", "rollNumber", "grade", "grNumber", "gender"]
           }
         }
       }
@@ -52,7 +55,7 @@ export const extractStudentFromIDCard = async (base64Image: string): Promise<Par
             }
           },
           {
-            text: "Analyze this school ID card image. Extract the student details into JSON format. If a field is not visible, leave it empty. Infer the Grade/Class if possible (e.g. 'X' or '10' becomes '10'). Split Grade and Section if combined (e.g. '10-A')."
+            text: "Analyze this school ID card image. Extract the student details into JSON format. Look for 'GR No', 'G.R.', 'Reg No' or similar for grNumber. IMPORTANT: Look for Date of Birth (DOB) and strictly format it as YYYY-MM-DD. Look for Gender/Sex (M/F). If a field is not visible, leave it empty. Infer the Grade/Class if possible."
           }
         ]
       },
@@ -63,8 +66,10 @@ export const extractStudentFromIDCard = async (base64Image: string): Promise<Par
            properties: {
              name: { type: Type.STRING },
              rollNumber: { type: Type.STRING },
+             grNumber: { type: Type.STRING },
              grade: { type: Type.STRING },
              section: { type: Type.STRING },
+             gender: { type: Type.STRING, enum: ["Male", "Female", "Other"] },
              parentName: { type: Type.STRING },
              parentContact: { type: Type.STRING },
              dob: { type: Type.STRING },

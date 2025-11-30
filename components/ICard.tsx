@@ -2,7 +2,7 @@
 import React from 'react';
 import { Student, Teacher, SchoolDetails } from '../types';
 import QRCode from 'react-qr-code';
-import { ArrowLeft, Download, School } from 'lucide-react';
+import { ArrowLeft, Download, School, X } from 'lucide-react';
 
 interface ICardProps {
   person: Student | Teacher;
@@ -55,11 +55,19 @@ export const ICard: React.FC<ICardProps> = ({ person, type, schoolDetails, onClo
 
     // 5. Role Badge
     ctx.fillStyle = "#f1f5f9";
-    const badgeWidth = 300;
+    const badgeWidth = 400; // Wider for teachers potentially
     ctx.fillRect((width - badgeWidth)/2, 380, badgeWidth, 60);
     ctx.font = "bold 30px monospace";
     ctx.fillStyle = type === 'STUDENT' ? "#2563eb" : "#f97316";
-    ctx.fillText(type, width / 2, 420);
+    
+    let roleText: string = type;
+    if (type === 'TEACHER') {
+       const t = person as Teacher;
+       if (t.isClassTeacher) roleText = "CLASS TEACHER";
+       else roleText = "SUBJECT TEACHER";
+    }
+    
+    ctx.fillText(roleText, width / 2, 420);
 
     // 6. Draw QR Code
     // We convert the SVG QR code to an image to draw it on canvas
@@ -70,9 +78,9 @@ export const ICard: React.FC<ICardProps> = ({ person, type, schoolDetails, onClo
 
     img.onload = () => {
       // Draw QR Code
-      const qrSize = 400;
+      const qrSize = 350;
       const qrX = (width - qrSize) / 2;
-      const qrY = 500;
+      const qrY = 480;
       
       // Draw white background for QR Code (Quiet Zone)
       ctx.fillStyle = "#ffffff";
@@ -100,15 +108,10 @@ export const ICard: React.FC<ICardProps> = ({ person, type, schoolDetails, onClo
   return (
     <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-sm my-auto">
-        <button 
-          onClick={onClose}
-          className="mb-6 flex items-center gap-2 text-white hover:text-brand-light transition-colors font-bold"
-        >
-          <ArrowLeft size={20} /> Back to App
-        </button>
+        
 
         {/* Card Container - Visual Representation */}
-        <div className="bg-white text-slate-900 rounded-2xl overflow-hidden shadow-2xl relative border border-slate-200">
+        <div className="bg-white text-slate-900 rounded-2xl overflow-hidden shadow-2xl relative border border-slate-200 mb-6">
            {/* Header Stripe */}
            <div className={`h-32 ${themeColor} relative flex flex-col items-center justify-center text-center p-4`}>
               <div className="absolute top-4 left-4 text-white opacity-80">
@@ -129,11 +132,13 @@ export const ICard: React.FC<ICardProps> = ({ person, type, schoolDetails, onClo
              
              <h2 className="text-2xl font-bold text-slate-900 mb-1 leading-tight">{person.name}</h2>
              <span className={`px-4 py-1 rounded-full text-xs font-bold font-mono mb-6 border uppercase tracking-wider ${type === 'STUDENT' ? 'bg-blue-50 text-brand-blue border-blue-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
-               {type === 'STUDENT' ? (isStudent(person) ? person.grade : '') : (person as Teacher).subject} {type}
+               {type === 'STUDENT' 
+                 ? (isStudent(person) ? person.grade : '') 
+                 : ((person as Teacher).isClassTeacher ? 'CLASS TEACHER' : 'SUBJECT TEACHER')}
              </span>
 
              {/* QR Code Container with Padding (Quiet Zone) */}
-             <div className="bg-white p-4 rounded-xl border-2 border-slate-100 shadow-inner mb-6 w-full max-w-[220px] mx-auto aspect-square flex items-center justify-center">
+             <div className="bg-white p-4 rounded-xl border-2 border-slate-100 shadow-inner mb-6 w-full max-w-[200px] mx-auto aspect-square flex items-center justify-center">
                <QRCode 
                  id="person-qr-code"
                  value={person.id} 
@@ -157,25 +162,41 @@ export const ICard: React.FC<ICardProps> = ({ person, type, schoolDetails, onClo
                       <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Section</span>
                       <span className="font-bold text-slate-700 text-sm">{person.section}</span>
                     </div>
-                    <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
+                    
+                    {/* Gender and GR Row */}
+                    <div className="col-span-2 flex justify-between bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
+                       <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Gender</span>
+                          <span className="font-bold text-slate-700">{person.gender || 'N/A'}</span>
+                       </div>
+                       <div className="text-right">
+                           <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">GR No</span>
+                           <span className="font-mono font-bold text-slate-700">{person.grNumber || 'N/A'}</span>
+                       </div>
+                    </div>
+
+                    <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1 text-center">
                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Parent/Guardian</span>
-                       <span className="font-bold text-slate-700">{person.parentName || 'N/A'}</span>
+                       <span className="font-bold text-slate-700 block">{person.parentName || 'N/A'}</span>
                        <div className="text-slate-500 font-mono mt-0.5">{person.parentContact}</div>
                     </div>
                  </>
                ) : (
                   <>
                      <div>
-                       <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Faculty ID</span>
-                       <span className="font-bold text-slate-700 text-sm">FAC-{person.id.substring(0,4).toUpperCase()}</span>
+                       <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Subject</span>
+                       <span className="font-bold text-slate-700 text-sm">{(person as Teacher).subject}</span>
                      </div>
                      <div className="text-right">
-                       <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Qual.</span>
-                       <span className="font-bold text-slate-700 text-sm">{(person as Teacher).qualification}</span>
+                       <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Joined</span>
+                       <span className="font-bold text-slate-700 text-sm">{(person as Teacher).joiningDate || 'N/A'}</span>
                      </div>
                      <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Contact</span>
-                        <span className="font-bold text-slate-700 break-all">{(person as Teacher).email}</span>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Qualification & Exp.</span>
+                        <div className="flex justify-between">
+                           <span className="font-bold text-slate-700">{(person as Teacher).qualification}</span>
+                           <span className="font-mono text-slate-500">{(person as Teacher).experience || '0'} Yrs</span>
+                        </div>
                      </div>
                   </>
                )}
@@ -183,13 +204,20 @@ export const ICard: React.FC<ICardProps> = ({ person, type, schoolDetails, onClo
            </div>
         </div>
 
-        <div className="mt-6 flex justify-center pb-8">
+        <div className="mt-0 flex flex-col items-center gap-3 pb-8">
           <button 
             onClick={handleDownload}
-            className="flex items-center gap-2 bg-white text-slate-900 px-8 py-4 rounded-full font-bold shadow-xl hover:scale-105 active:scale-95 transition-all text-sm uppercase tracking-wide"
+            className="w-full flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-4 rounded-full font-bold shadow-xl hover:scale-105 active:scale-95 transition-all text-sm uppercase tracking-wide"
           >
             <Download size={20} className="text-brand-blue" />
             Save to Gallery
+          </button>
+          
+          <button 
+            onClick={onClose}
+            className="flex items-center gap-2 text-white/50 hover:text-white px-4 py-2 rounded-lg font-bold transition-colors text-sm"
+          >
+            <X size={16} /> Close & Go Back
           </button>
         </div>
       </div>

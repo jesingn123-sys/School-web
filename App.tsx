@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { AppView, Student, Teacher, ClassSection, SchoolDetails, AttendanceRecord } from './types';
+import { AppView, Student, Teacher, ClassSection, SchoolDetails, AttendanceRecord, User } from './types';
 import { Dashboard } from './components/Dashboard';
 import { Scanner } from './components/Scanner';
 import { StudentList } from './components/StudentList';
@@ -8,6 +8,7 @@ import { TeacherList } from './components/TeacherList';
 import { ClassManager } from './components/ClassManager';
 import { SchoolSetup } from './components/SchoolSetup';
 import { ICard } from './components/ICard';
+import { Auth } from './components/Auth';
 import { LayoutDashboard, Users, ScanLine, GraduationCap, School, Menu } from 'lucide-react';
 
 // Mock initial data
@@ -15,7 +16,9 @@ const MOCK_SCHOOL: SchoolDetails = {
   name: 'Riverdale High',
   address: '123 Riverdale Ln, New York',
   establishedYear: '1998',
-  startSchoolTime: '08:00'
+  shifts: [
+    { id: 's1', name: 'Morning Shift', startTime: '07:30', lateTime: '08:00' }
+  ]
 };
 
 const MOCK_CLASSES: ClassSection[] = [
@@ -25,10 +28,11 @@ const MOCK_CLASSES: ClassSection[] = [
 ];
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   
   // Data State
-  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails | null>(null); // Start null to force setup
+  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails | null>(null); 
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<ClassSection[]>(MOCK_CLASSES);
@@ -41,6 +45,11 @@ const App: React.FC = () => {
 
   // Load from local storage
   useEffect(() => {
+    const session = localStorage.getItem('vibecheck_session');
+    if (session) {
+      setCurrentUser(JSON.parse(session));
+    }
+
     const storedSchool = localStorage.getItem('vibecheck_school');
     const storedStudents = localStorage.getItem('vibecheck_students');
     const storedTeachers = localStorage.getItem('vibecheck_teachers');
@@ -48,7 +57,7 @@ const App: React.FC = () => {
     const storedAttendance = localStorage.getItem('vibecheck_attendance');
     
     if (storedSchool) setSchoolDetails(JSON.parse(storedSchool));
-    else setSchoolDetails(MOCK_SCHOOL); // Use mock if empty for demo
+    else setSchoolDetails(MOCK_SCHOOL); 
 
     if (storedStudents) setStudents(JSON.parse(storedStudents));
     if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
@@ -58,12 +67,41 @@ const App: React.FC = () => {
 
   // Save to local storage
   useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('vibecheck_session', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('vibecheck_session');
+    }
+
     if (schoolDetails) localStorage.setItem('vibecheck_school', JSON.stringify(schoolDetails));
     localStorage.setItem('vibecheck_students', JSON.stringify(students));
     localStorage.setItem('vibecheck_teachers', JSON.stringify(teachers));
     localStorage.setItem('vibecheck_classes', JSON.stringify(classes));
     localStorage.setItem('vibecheck_attendance', JSON.stringify(attendance));
-  }, [schoolDetails, students, teachers, classes, attendance]);
+  }, [schoolDetails, students, teachers, classes, attendance, currentUser]);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    if (user.schoolName && (!schoolDetails || schoolDetails.name === 'Riverdale High')) {
+       // If user provided school name during signup, preset it
+       setSchoolDetails(prev => prev ? { ...prev, name: user.schoolName! } : { ...MOCK_SCHOOL, name: user.schoolName! });
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentView(AppView.DASHBOARD);
+  };
+
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      // Optional: Adjust pitch/rate to sound younger/cooler
+      utterance.rate = 1.1; 
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const handleScan = (data: string) => {
     // Check if it is a student
@@ -80,19 +118,52 @@ const App: React.FC = () => {
       
       if (alreadyPresent) {
         setScanMessage({ text: `${person.name} is already present!`, type: 'error' });
+        speak(`Already scanned, ${person.name}`);
       } else {
-        // Calculate Status (Present or Late)
+        // Calculate Status (Present or Late) based on Shifts
         let status: 'PRESENT' | 'LATE' = 'PRESENT';
-        
-        if (schoolDetails?.startSchoolTime) {
-          const now = new Date();
-          const [hours, minutes] = schoolDetails.startSchoolTime.split(':').map(Number);
-          const startTimeDate = new Date();
-          startTimeDate.setHours(hours, minutes, 0, 0);
-          
-          if (now > startTimeDate) {
-            status = 'LATE';
-          }
+        let matchedShiftName = 'Regular';
+
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTimeMinutes = currentHour * 60 + currentMinute;
+
+        if (schoolDetails?.shifts && schoolDetails.shifts.length > 0) {
+           // Find the closest shift logic
+           // We assume the shift is relevant if we are scanning within 2 hours before start or anytime after
+           // For simplicity, we compare with the "Late Time" of each shift. 
+           // If we are before or slightly after a shift's late time, it's that shift.
+           
+           // Sort shifts by start time
+           const sortedShifts = [...schoolDetails.shifts].sort((a, b) => a.startTime.localeCompare(b.startTime));
+           
+           // Find the active shift
+           let activeShift = sortedShifts[0]; // Default to first
+           
+           // If we have multiple shifts, try to find the one closest to now
+           let minDiff = Infinity;
+           
+           for (const shift of sortedShifts) {
+              const [h, m] = shift.startTime.split(':').map(Number);
+              const shiftStartMinutes = h * 60 + m;
+              const diff = Math.abs(currentTimeMinutes - shiftStartMinutes);
+              if (diff < minDiff) {
+                 minDiff = diff;
+                 activeShift = shift;
+              }
+           }
+
+           matchedShiftName = activeShift.name;
+
+           // Parse Late Time
+           const [lh, lm] = activeShift.lateTime.split(':').map(Number);
+           const lateTimeMinutes = lh * 60 + lm;
+
+           // Check Late Status
+           if (currentTimeMinutes > lateTimeMinutes) {
+              status = 'LATE';
+           }
         }
 
         const newRecord: AttendanceRecord = {
@@ -100,23 +171,33 @@ const App: React.FC = () => {
           personId: person.id,
           type: type as any,
           status,
+          shiftName: matchedShiftName,
           timestamp: Date.now(),
           date: today
         };
         setAttendance(prev => [...prev, newRecord]);
         
+        const isLate = status === 'LATE';
         setScanMessage({ 
-          text: status === 'LATE' 
-            ? `⚠️ Marked LATE: ${person.name}` 
-            : `✅ Marked PRESENT: ${person.name}`, 
-          type: status === 'LATE' ? 'warning' : 'success' 
+          text: isLate 
+            ? `⚠️ Marked LATE (${matchedShiftName}): ${person.name}` 
+            : `✅ Marked PRESENT (${matchedShiftName}): ${person.name}`, 
+          type: isLate ? 'warning' : 'success' 
         });
+
+        // Voice Feedback
+        if (isLate) {
+          speak(`Late entry, ${person.name}`);
+        } else {
+          speak(`Welcome, ${person.name}`);
+        }
       }
     } else {
       setScanMessage({ text: "Unknown ID Card", type: 'error' });
+      speak("Unknown ID");
     }
 
-    // Clear message after 2 seconds, but STAY ON SCANNER
+    // Clear message after 2 seconds
     setTimeout(() => {
       setScanMessage(null);
     }, 2000);
@@ -131,14 +212,16 @@ const App: React.FC = () => {
 
   const handleAddStudent = (student: Student) => {
     setStudents(prev => [...prev, student]);
-    // Auto open ICard for download
     setSelectedPersonForCard({ person: student, type: 'STUDENT' });
   };
 
   const handleAddTeacher = (teacher: Teacher) => {
     setTeachers(prev => [...prev, teacher]);
-    // Auto open ICard for download
     setSelectedPersonForCard({ person: teacher, type: 'TEACHER' });
+  };
+
+  const handleUpdateTeacher = (updatedTeacher: Teacher) => {
+    setTeachers(prev => prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t));
   };
 
   const handleAddClass = (cls: ClassSection) => {
@@ -146,6 +229,10 @@ const App: React.FC = () => {
   };
 
   // --- Render ---
+
+  if (!currentUser) {
+    return <Auth onLogin={handleLogin} />;
+  }
 
   // Force setup if no school name (unless we are on the setup page)
   if (!schoolDetails && currentView !== AppView.SCHOOL_SETUP) {
@@ -178,7 +265,13 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="min-h-screen w-full pt-6">
-        {currentView === AppView.SCHOOL_SETUP && <SchoolSetup currentDetails={schoolDetails} onSave={handleSaveSchool} />}
+        {currentView === AppView.SCHOOL_SETUP && (
+          <SchoolSetup 
+            currentDetails={schoolDetails} 
+            onSave={handleSaveSchool} 
+            onLogout={handleLogout}
+          />
+        )}
         
         {currentView === AppView.DASHBOARD && (
           <Dashboard 
@@ -204,7 +297,9 @@ const App: React.FC = () => {
         {currentView === AppView.TEACHERS && (
           <TeacherList 
             teachers={teachers} 
+            classes={classes}
             onAddTeacher={handleAddTeacher}
+            onUpdateTeacher={handleUpdateTeacher}
             onDeleteTeacher={(id) => setTeachers(prev => prev.filter(t => t.id !== id))}
             onViewICard={(t) => setSelectedPersonForCard({ person: t, type: 'TEACHER' })}
           />

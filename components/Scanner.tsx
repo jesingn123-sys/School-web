@@ -45,12 +45,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
       if (code && code.data && code.data.trim().length > 0 && !inCooldown) {
         lastScanTime.current = now;
-        
-        // Play beep
-        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
-        audio.volume = 0.5;
-        audio.play().catch(() => {}); // catch audio context errors
-
         onScan(code.data);
       }
     }
